@@ -223,6 +223,8 @@ def serv_certassurance_with_param(fqdn):
         j['fqdn'] = fqdn
         j['assurance'] = assurance_to_str(rc)
 
+    from bottle import response
+    response.content_type = 'application/json'
     return json.dumps(j)
 
 
