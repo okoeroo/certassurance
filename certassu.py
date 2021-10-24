@@ -33,25 +33,30 @@ from cryptography.x509.oid import (
 
 class bcolors:
     HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
+    COLOR_OV = '\033[94m'
+    COLOR_DV = '\033[96m'
+    COLOR_EV = '\033[92m'
+    COLOR_QWAC = '\033[0;37;45m'
     WARNING = '\033[93m'
     FAIL = '\033[91m'
-    ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+    ENDC = '\033[0m'
 
 
 IDENTIFIED_TYPE_DV      = 1
 IDENTIFIED_TYPE_OV      = 2
 IDENTIFIED_TYPE_EV      = 3
 IDENTIFIED_TYPE_QWAC    = 4
+IDENTIFIED_TYPE_PSD2    = 5
 
 
-OID_DV = "2.23.140.1.2.1"
-OID_OV = "2.23.140.1.2.2"
-OID_EV = "2.23.140.1.1"
+OID_DV        = "2.23.140.1.2.1"
+OID_OV        = "2.23.140.1.2.2"
+OID_EV        = "2.23.140.1.1"
+OID_QWAC_WEB  = "0.4.0.194112.1.4"
+OID_PSD2_WEB  = "0.4.0.19495.3.1"
+
 
 
 """
@@ -106,14 +111,21 @@ def test_OIDs(cert_x509):
     # Test
     for policy_val in val:
         if OID_DV == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.OKCYAN}Domain Validated OID found{bcolors.ENDC}")
+            print (f"{bcolors.COLOR_DV}Domain Validated OID found{bcolors.ENDC}")
             return IDENTIFIED_TYPE_DV
-        if OID_OV == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.OKBLUE}Organisation Validated OID found{bcolors.ENDC}")
+        elif OID_OV == policy_val.policy_identifier.dotted_string:
+            print (f"{bcolors.COLOR_OV}Organisation Validated OID found{bcolors.ENDC}")
             return IDENTIFIED_TYPE_OV
-        if OID_EV == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.OKGREEN}Extended Validated OID found{bcolors.ENDC}")
+        elif OID_EV == policy_val.policy_identifier.dotted_string:
+            print (f"{bcolors.COLOR_EV}Extended Validated OID found{bcolors.ENDC}")
             return IDENTIFIED_TYPE_EV
+        elif OID_QWAC_WEB == policy_val.policy_identifier.dotted_string:
+            print (f"{bcolors.COLOR_QWAC}QWAC Web Validated OID found{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_QWAC
+        elif OID_PSD2_WEB == policy_val.policy_identifier.dotted_string:
+            print (f"{bcolors.COLOR_QWAC}PSD2 Web Validated OID found{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_PSD2
+
     else:
         print (f"{bcolors.FAIL}No OID found for DV, OV, EV{bcolors.ENDC}")
         sys.exit(1)
