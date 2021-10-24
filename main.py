@@ -3,6 +3,7 @@
 import binascii
 import os
 import sys
+import argparse
 
 import ssl
 import socket
@@ -61,13 +62,17 @@ EV HTTPS certificates contain a subject with X.509 OIDs for jurisdictionOfIncorp
 
 
 # Connect to host, get X.509 in PEM format
-def get_certificate(host, port=443, timeout=10):
+def get_certificate(host, port=443, timeout=8):
     import ssl
     port = 443
-    conn = ssl.create_connection((host, port))
-    context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    sock = context.wrap_socket(conn, server_hostname=host)
-    cert_pem = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
+    try:
+        conn = ssl.create_connection((host, port))
+        context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        sock = context.wrap_socket(conn, server_hostname=host)
+        cert_pem = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
+
+    except:
+        return None
 
     # cert_pem = ssl.get_server_certificate((host, port))
     return cert_pem
@@ -124,17 +129,39 @@ def analyse(cert_pem):
     test_OIDs(cert_x509)
 
 
-def main(host, port=443):
+def start_probe(host, port=443):
     cert_pem = get_certificate(host, port)
+    if cert_pem is None:
+        print(f"{bcolors.FAIL}Connection failed, no certificate to analyse{bcolors.ENDC}")
+        return
 
+    # Analyse the PEM formatted certificate from the peer
     analyse(cert_pem)
 
 
-# Main
+def argparsing(exec_file):
+    parser = argparse.ArgumentParser(exec_file)
+    parser.add_argument("-i",
+                        dest='input',
+                        help="Input file.",
+                        default=None,
+                        type=str)
+
+    args = parser.parse_args()
+    return args
+
+
+### Main
 if __name__ == "__main__":
-    with open("tests.txt") as fp:
+    args = argparsing(os.path.basename(__file__))
+    if args.input is None:
+        print("No input file, use -i <file>")
+        sys.exit(1)
+
+    with open(args.input) as fp:
         lines = fp.readlines()
         for line in lines:
             print(f"{bcolors.HEADER}--- {line.strip()} ---{bcolors.ENDC}")
-            main(line.strip(), 443)
+            start_probe(line.strip(), 443)
+
 
