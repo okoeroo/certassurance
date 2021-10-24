@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from bottle import route, run, template
+
 import binascii
 import os
 import sys
@@ -10,6 +12,7 @@ import socket
 from pprint import pprint
 import OpenSSL
 
+import json
 
 from cryptography import utils, x509
 from cryptography.x509 import extensions
@@ -68,19 +71,25 @@ EV HTTPS certificates contain a subject with X.509 OIDs for jurisdictionOfIncorp
 
 # Connect to host, get X.509 in PEM format
 def get_certificate(host, port=443, timeout=8):
-    import ssl
-    port = 443
+
     try:
         conn = ssl.create_connection((host, port))
-        context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.load_verify_locations(capath='/etc/ssl/certs/',
+                                      cafile='/etc/ssl/certs/ca-certificates.crt')
+
         sock = context.wrap_socket(conn, server_hostname=host)
-        cert_pem = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
+        cert_der = sock.getpeercert(True)
+        cert_pem = ssl.DER_cert_to_PEM_cert(cert_der)
+
+        # Note: Not matching hostname on purpose
 
     except:
         return None
 
     # cert_pem = ssl.get_server_certificate((host, port))
     return cert_pem
+
 
 def info_cert(cert_x509):
     print("Subject:", cert_x509.subject.rfc4514_string())
@@ -144,7 +153,10 @@ def analyse(cert_pem):
     cert_x509 = x509.load_pem_x509_certificate(bytes(cert_pem, 'utf-8'))
 
     info_cert(cert_x509)
-    test_OIDs(cert_x509)
+
+    rc_analysis = test_OIDs(cert_x509)
+    if rc_analysis is not None:
+        return rc_analysis
 
 
 def start_probe(host, port=443):
@@ -154,7 +166,7 @@ def start_probe(host, port=443):
         return
 
     # Analyse the PEM formatted certificate from the peer
-    analyse(cert_pem)
+    return analyse(cert_pem)
 
 
 def argparsing(exec_file):
@@ -164,14 +176,67 @@ def argparsing(exec_file):
                         help="Input file.",
                         default=None,
                         type=str)
+    parser.add_argument("-p",
+                        dest='port',
+                        help="Port number.",
+                        default=None,
+                        type=int)
 
     args = parser.parse_args()
     return args
 
 
+def assurance_to_str(code):
+    if code == IDENTIFIED_TYPE_DV:
+        return 'DV'
+    elif code == IDENTIFIED_TYPE_OV:
+        return 'OV'
+    elif code == IDENTIFIED_TYPE_EV:
+        return 'EV'
+    elif code == IDENTIFIED_TYPE_QWAC:
+        return 'QWAC'
+    elif code == IDENTIFIED_TYPE_PSD2:
+        return 'PSD2'
+
+
+def assurance_to_OID(code):
+    if code == IDENTIFIED_TYPE_DV:
+        return OID_DV
+    elif code == IDENTIFIED_TYPE_OV:
+        return OID_OV
+    elif code == IDENTIFIED_TYPE_EV:
+        return OID_EV
+    elif code == IDENTIFIED_TYPE_QWAC:
+        return OID_QWAC_WEB
+    elif code == IDENTIFIED_TYPE_PSD2:
+        return OID_PSD2_WEB
+
+
+@route('/certassurance/<fqdn>')
+def serv_certassurance_with_param(fqdn):
+    rc = start_probe(fqdn, 443)
+
+    j = {}
+    if rc is None:
+        j['fqdn'] = fqdn
+    else:
+        j['fqdn'] = fqdn
+        j['assurance'] = assurance_to_str(rc)
+
+    return json.dumps(j)
+
+
 ### Main
 if __name__ == "__main__":
     args = argparsing(os.path.basename(__file__))
+
+    # Launch a micro HTTP service
+    if args.port is not None:
+        # Loop here endlessly
+        run(host='0.0.0.0', port=args.port)
+        sys.exit(0)
+
+    # Process a list
     if args.input is None:
         print("No input file, use -i <file>")
         sys.exit(1)

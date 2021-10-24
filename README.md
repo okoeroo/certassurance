@@ -4,8 +4,15 @@ Based on the certificate OIDs determine the certificate assurance level DV, OV, 
 
 ## Usage:
 `./main.py -i <file>`
+Where file is a flat ascii file with on each line a location to HTTPS. By default probe port 443 is used.
 
-Where file is a flat ascii file with on each line a location to HTTPS. By default port 443 is used.
+`./main.py -p <port number>`
+Start a service and listen on port number.
+
+## Service example:
+`http://localhost:8080/certassurance/oscar.koeroo.net`
+`{"fqdn": "oscar.koeroo.net", "assurance": "DV"}``
+
 
 
 ## Certificate Policies
