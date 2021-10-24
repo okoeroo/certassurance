@@ -10,8 +10,11 @@ Where file is a flat ascii file with on each line a location to HTTPS. By defaul
 Start a service and listen on port number.
 
 ## Service example:
+GET request example
 `http://localhost:8080/certassurance/oscar.koeroo.net`
-`{"fqdn": "oscar.koeroo.net", "assurance": "DV"}``
+
+Reply:
+`{"fqdn": "oscar.koeroo.net", "assurance": "DV"}`
 
 
 
@@ -26,6 +29,12 @@ To probe are the Certificate Policies on:
 
 ## Top 10 million websites
 Source: https://www.domcop.com/top-10-million-websites
+
+## Data sets from https://basisbeveiliging.nl/#/datasets
+* nl_government_urls_only_2021-10-24.list
+* nl_healthcare_urls_only_2021-10-24.list
+* nl_municipality_urls_only_2021-10-24.list
+* nl_province_urls_only_2021-10-24.list
 
 
 Notes:
