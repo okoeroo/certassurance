@@ -3,7 +3,7 @@
 Based on the certificate OIDs determine the certificate assurance level DV, OV, or EV.
 
 ## Usage:
-./main.py -i <file>
+`./main.py -i <file>`
 
 Where file is a flat ascii file with on each line a location to HTTPS. By default port 443 is used.
 
