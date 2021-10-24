@@ -92,7 +92,6 @@ def info_cert(cert_x509):
 def test_OIDs(cert_x509):
     try:
         val = cert_x509.extensions.get_extension_for_oid(ExtensionOID.CERTIFICATE_POLICIES).value
-        # print(val)
 
     except x509.ExtensionNotFound:
         return None
@@ -125,6 +124,13 @@ def test_OIDs(cert_x509):
         elif OID_PSD2_WEB == policy_val.policy_identifier.dotted_string:
             print (f"{bcolors.COLOR_QWAC}PSD2 Web Validated OID found{bcolors.ENDC}")
             return IDENTIFIED_TYPE_PSD2
+
+        # QUOVADIS ROOT CA2
+        # CERTIFICATE POLICY/CERTIFICATION PRACTICE STATEMENT
+        # OID: 1.3.6.1.4.1.8024.0.2 Effective Date: May 27, 2014 Version: 1.15
+        elif "1.3.6.1.4.1.8024.0.2.100.1.1" == policy_val.policy_identifier.dotted_string:
+            print (f"{bcolors.COLOR_OV}Organisation Validated OID found - QUOVADIS ROOT CA{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_OV
 
     else:
         print (f"{bcolors.FAIL}No OID found for DV, OV, EV{bcolors.ENDC}")
