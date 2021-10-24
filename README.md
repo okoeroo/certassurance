@@ -17,3 +17,6 @@ To probe are the Certificate Policies on:
 
 ## Top 10 million websites
 Source: https://www.domcop.com/top-10-million-websites
+
+
+## TODO: identify QWAC certificates
