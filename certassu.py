@@ -37,6 +37,7 @@ from cryptography.x509.oid import (
 class bcolors:
     HEADER = '\033[95m'
     COLOR_OV = '\033[94m'
+    COLOR_IV = '\033[93m'
     COLOR_DV = '\033[96m'
     COLOR_EV = '\033[92m'
     COLOR_QWAC = '\033[0;37;45m'
@@ -52,10 +53,14 @@ IDENTIFIED_TYPE_OV      = 2
 IDENTIFIED_TYPE_EV      = 3
 IDENTIFIED_TYPE_QWAC    = 4
 IDENTIFIED_TYPE_PSD2    = 5
+IDENTIFIED_TYPE_IV      = 6
 
 
+# Source:
+# https://cabforum.org/object-registry/
 OID_DV        = "2.23.140.1.2.1"
 OID_OV        = "2.23.140.1.2.2"
+OID_IV        = "2.23.140.1.2.3" # individual-validated
 OID_EV        = "2.23.140.1.1"
 OID_QWAC_WEB  = "0.4.0.194112.1.4"
 OID_PSD2_WEB  = "0.4.0.19495.3.1"
@@ -70,10 +75,10 @@ EV HTTPS certificates contain a subject with X.509 OIDs for jurisdictionOfIncorp
 
 
 # Connect to host, get X.509 in PEM format
-def get_certificate(host, port=443, timeout=8):
+def get_certificate(host, port=443, timeout=5):
 
     try:
-        conn = ssl.create_connection((host, port))
+        conn = ssl.create_connection((host, port), timeout=timeout)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         context.load_verify_locations(capath='/etc/ssl/certs/',
                                       cafile='/etc/ssl/certs/ca-certificates.crt')
@@ -124,6 +129,9 @@ def test_OIDs(cert_x509):
         elif OID_OV == policy_val.policy_identifier.dotted_string:
             print (f"{bcolors.COLOR_OV}Organisation Validated OID found{bcolors.ENDC}")
             return IDENTIFIED_TYPE_OV
+        elif OID_IV == policy_val.policy_identifier.dotted_string:
+            print (f"{bcolors.COLOR_IV}Individual Validated OID found{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_IV
         elif OID_EV == policy_val.policy_identifier.dotted_string:
             print (f"{bcolors.COLOR_EV}Extended Validated OID found{bcolors.ENDC}")
             return IDENTIFIED_TYPE_EV
@@ -159,8 +167,8 @@ def analyse(cert_pem):
         return rc_analysis
 
 
-def start_probe(host, port=443):
-    cert_pem = get_certificate(host, port)
+def start_probe(host, port=443, timeout=5):
+    cert_pem = get_certificate(host, port, timeout)
     if cert_pem is None:
         print(f"{bcolors.FAIL}Connection failed, no certificate to analyse{bcolors.ENDC}")
         return
@@ -176,10 +184,20 @@ def argparsing(exec_file):
                         help="Input file.",
                         default=None,
                         type=str)
-    parser.add_argument("-p",
-                        dest='port',
-                        help="Port number.",
+    parser.add_argument("-lp",
+                        dest='listening_port',
+                        help="Listening port number.",
                         default=None,
+                        type=int)
+    parser.add_argument("-dp",
+                        dest='destination_port',
+                        help="Destination port number.",
+                        default=443,
+                        type=int)
+    parser.add_argument("-t",
+                        dest='timeout',
+                        help="timeout in seconds.",
+                        default=10,
                         type=int)
 
     args = parser.parse_args()
@@ -191,6 +209,8 @@ def assurance_to_str(code):
         return 'DV'
     elif code == IDENTIFIED_TYPE_OV:
         return 'OV'
+    elif code == IDENTIFIED_TYPE_IV:
+        return 'IV'
     elif code == IDENTIFIED_TYPE_EV:
         return 'EV'
     elif code == IDENTIFIED_TYPE_QWAC:
@@ -233,9 +253,9 @@ if __name__ == "__main__":
     args = argparsing(os.path.basename(__file__))
 
     # Launch a micro HTTP service
-    if args.port is not None:
+    if args.listening_port is not None:
         # Loop here endlessly
-        run(host='0.0.0.0', port=args.port)
+        run(host='0.0.0.0', port=args.listening_port)
         sys.exit(0)
 
     # Process a list
@@ -247,6 +267,6 @@ if __name__ == "__main__":
         lines = fp.readlines()
         for line in lines:
             print(f"{bcolors.HEADER}--- {line.strip()} ---{bcolors.ENDC}")
-            start_probe(line.strip(), 443)
+            start_probe(line.strip(), args.destination_port, args.timeout)
 
 
