@@ -184,6 +184,11 @@ def argparsing(exec_file):
                         help="Input file.",
                         default=None,
                         type=str)
+    parser.add_argument("--fqdn",
+                        dest='fqdn',
+                        help="Target FQDN.",
+                        default=None,
+                        type=str)
     parser.add_argument("-lp",
                         dest='listening_port',
                         help="Listening port number.",
@@ -256,6 +261,11 @@ if __name__ == "__main__":
     if args.listening_port is not None:
         # Loop here endlessly
         run(host='0.0.0.0', port=args.listening_port)
+        sys.exit(0)
+
+    # Just one host by its FQDN
+    if args.fqdn is not None:
+        start_probe(args.fqdn, args.destination_port, args.timeout)
         sys.exit(0)
 
     # Process a list
