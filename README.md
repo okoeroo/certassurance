@@ -24,11 +24,11 @@ This list is extended with an extra column to be explicit about the assurance le
 
 ## Certificate Policies
 To probe are the Certificate Policies on: 
-* OID for DV        = "2.23.140.1.2.1"
-* OID for OV        = "2.23.140.1.2.2"
-* OID for EV        = "2.23.140.1.1"
-* OID for QWAC Web  = "0.4.0.194112.1.4"
-* OID for PSD2 Web  = "0.4.0.19495.3.1"
+* ETSI
+* CA/B Forum
+* QWAC
+* Various CAs
+* Other types
 
 
 ## Top 10 million websites

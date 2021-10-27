@@ -84,7 +84,6 @@ class PolicyOID():
         self.reader = csv.DictReader(self.stream)
 
     def lookup(self, oid):
-
         # Rewind stream
         self.rewind()
 
@@ -99,7 +98,6 @@ class PolicyOID():
         for row in self.reader:
             for key, value in row.items():
                 if value == oid:
-                    print(key, value)
                     return row
         else:
             return None
@@ -177,11 +175,9 @@ def test_OIDs(cert_x509):
     for policy_val in val:
         found_oid = poid.lookup(policy_val.policy_identifier.dotted_string)
         if found_oid is None:
-            print (f"{bcolors.FAIL}No OID found for DV, OV, EV{bcolors.ENDC}")
-            sys.exit(1)
-            return None
+            continue
 
-        print(found_oid)
+        print("----", found_oid)
 
         # OrderedDict([
         # ('oid', '0.4.0.1456.1.1'), ('owner', 'ETSI'),
@@ -194,56 +190,36 @@ def test_OIDs(cert_x509):
 
         if found_oid['tls_dv'] == 'TRUE':
             print (f"{bcolors.COLOR_DV}Domain Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_DV
+            found_oid['type'] = 'DV'
         elif found_oid['tls_iv'] == 'TRUE':
             print (f"{bcolors.COLOR_IV}Individual Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_IV
+            found_oid['type'] = 'IV'
         elif found_oid['tls_ov'] == 'TRUE':
             print (f"{bcolors.COLOR_OV}Organisation Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_OV
+            found_oid['type'] = 'OV'
         elif found_oid['tls_ev'] == 'TRUE':
             print (f"{bcolors.COLOR_EV}Extended Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_EV
+            found_oid['type'] = 'EV'
         elif found_oid['short_name'] == 'etsi-qcp-w':
             print (f"{bcolors.COLOR_QWAC}QWAC Web Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_QWAC
+            found_oid['type'] = 'QWAC'
 
+        # PSD special
         elif OID_PSD2_WEB == policy_val.policy_identifier.dotted_string:
             print (f"{bcolors.COLOR_QWAC}PSD2 Web Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_PSD2
+            found_oid['type'] = 'PSD2'
 
+        else:
+            # Loop
+            continue
 
-        if OID_CAB_FORUM_DV == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.COLOR_DV}Domain Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_DV
-        elif OID_CAB_FORUM_OV == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.COLOR_OV}Organisation Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_OV
-        elif OID_CAB_FORUM_IV == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.COLOR_IV}Individual Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_IV
-        elif OID_CAB_FORUM_EV == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.COLOR_EV}Extended Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_EV
-        elif OID_QWAC_WEB == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.COLOR_QWAC}QWAC Web Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_QWAC
-        elif OID_PSD2_WEB == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.COLOR_QWAC}PSD2 Web Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_PSD2
-
-        # QUOVADIS ROOT CA2
-        # CERTIFICATE POLICY/CERTIFICATION PRACTICE STATEMENT
-        # OID: 1.3.6.1.4.1.8024.0.2 Effective Date: May 27, 2014 Version: 1.15
-        elif "1.3.6.1.4.1.8024.0.2.100.1.1" == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.COLOR_OV}Organisation Validated OID found - QUOVADIS ROOT CA{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_OV
+        # Return that OID row
+        return found_oid
 
     else:
         print (f"{bcolors.FAIL}No OID found for DV, OV, EV{bcolors.ENDC}")
         sys.exit(1)
         return None
-
 
 
 def analyse(cert_pem):
@@ -334,19 +310,19 @@ def assurance_to_OID(code):
 
 @route('/certassurance/<fqdn>')
 def serv_certassurance_with_param(fqdn):
-    rc = start_probe(fqdn, 443)
+    found_oid = start_probe(fqdn, 443)
 
     j = {}
-    if rc is None:
+    if found_oid is None:
         j['fqdn'] = fqdn
+        j['error'] = "nothing found"
     else:
         j['fqdn'] = fqdn
-        j['assurance'] = assurance_to_str(rc)
+        j['assurance'] = found_oid
 
     from bottle import response
     response.content_type = 'application/json'
     return json.dumps(j)
-
 
 
 
