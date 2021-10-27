@@ -17,6 +17,10 @@ Reply:
 `{"fqdn": "oscar.koeroo.net", "assurance": "DV"}`
 
 
+## New source of all types of Policy OIDs
+ZMap: https://github.com/zmap/constants/blob/master/x509/certificate_policies.csv
+This list is extended with an extra column to be explicit about the assurance level.
+
 
 ## Certificate Policies
 To probe are the Certificate Policies on: 

@@ -12,6 +12,8 @@ import socket
 from pprint import pprint
 import OpenSSL
 
+import io
+import csv
 import json
 
 from cryptography import utils, x509
@@ -58,13 +60,14 @@ IDENTIFIED_TYPE_IV      = 6
 
 # Source:
 # https://cabforum.org/object-registry/
-OID_DV        = "2.23.140.1.2.1"
-OID_OV        = "2.23.140.1.2.2"
-OID_IV        = "2.23.140.1.2.3" # individual-validated
-OID_EV        = "2.23.140.1.1"
-OID_QWAC_WEB  = "0.4.0.194112.1.4"
-OID_PSD2_WEB  = "0.4.0.19495.3.1"
+OID_CAB_FORUM_DV        = "2.23.140.1.2.1"
+OID_CAB_FORUM_OV        = "2.23.140.1.2.2"
+OID_CAB_FORUM_IV        = "2.23.140.1.2.3" # individual-validated
+OID_CAB_FORUM_EV        = "2.23.140.1.1"
+OID_QWAC_WEB    = "0.4.0.194112.1.4"
+OID_PSD2_WEB    = "0.4.0.19495.3.1"
 
+OID_ETSI_EV     = "0.4.0.2042.1.4"
 
 
 """
@@ -72,6 +75,53 @@ Wikipedia:
 
 EV HTTPS certificates contain a subject with X.509 OIDs for jurisdictionOfIncorporationCountryName (OID: 1.3.6.1.4.1.311.60.2.1.3),[12] jurisdictionOfIncorporationStateOrProvinceName (OID: 1.3.6.1.4.1.311.60.2.1.2) (optional),[13]jurisdictionLocalityName (OID: 1.3.6.1.4.1.311.60.2.1.1) (optional),[14] businessCategory (OID: 2.5.4.15)[15] and serialNumber (OID: 2.5.4.5),[16] with the serialNumber pointing to the ID at the relevant secretary of state (US) or government business registrar (outside US)[citation needed], as well as a CA-specific policy identifier so that EV-aware software, such as a web browser, can recognize them.[17] This identifier[18][failed verification] is what defines EV certificate and is the difference with OV certificate.
 """
+
+class PolicyOID():
+    def __init__(self, path):
+        with open(path, "r") as f:
+            self.stream = io.StringIO(f.read())
+
+        self.reader = csv.DictReader(self.stream)
+
+    def lookup(self, oid):
+
+        # Rewind stream
+        self.rewind()
+
+        # OrderedDict([
+        # ('oid', '0.4.0.1456.1.1'), ('owner', 'ETSI'),
+        # ('customer', ''), ('short_name', 'etsi-qcp'), ('long_name', 'ETSI
+        # Qualified Certificate Policy'), ('description', 'ETSI Qualified
+        # Certificate Policy (QCP)'), ('tls_dv', ''), ('tls_ov', ''),
+        # ('tls_ev', ''), ('tls_iv', ''), ('codesigning_ov', ''),
+        # ('codesigning_ev', '')])
+
+        for row in self.reader:
+            for key, value in row.items():
+                if value == oid:
+                    print(key, value)
+                    return row
+        else:
+            return None
+
+    def rewind(self):
+        self.stream.seek(0, 0)
+
+    def headers(self):
+        # Rewind stream
+        self.rewind()
+
+        for row in self.reader:
+            print(row)
+            return
+
+    def show(self):
+        # Rewind stream
+        self.rewind()
+
+        for row in self.reader:
+            print(row)
+
 
 
 # Connect to host, get X.509 in PEM format
@@ -104,6 +154,8 @@ def info_cert(cert_x509):
 
 # Get the Policy OIDs from the certificate and see if it contains the OIDs for DN, OV or EV
 def test_OIDs(cert_x509):
+    # poid.show()
+
     try:
         val = cert_x509.extensions.get_extension_for_oid(ExtensionOID.CERTIFICATE_POLICIES).value
 
@@ -123,16 +175,54 @@ def test_OIDs(cert_x509):
 
     # Test
     for policy_val in val:
-        if OID_DV == policy_val.policy_identifier.dotted_string:
+        found_oid = poid.lookup(policy_val.policy_identifier.dotted_string)
+        if found_oid is None:
+            print (f"{bcolors.FAIL}No OID found for DV, OV, EV{bcolors.ENDC}")
+            sys.exit(1)
+            return None
+
+        print(found_oid)
+
+        # OrderedDict([
+        # ('oid', '0.4.0.1456.1.1'), ('owner', 'ETSI'),
+        # ('customer', ''), ('short_name', 'etsi-qcp'), ('long_name', 'ETSI
+        # Qualified Certificate Policy'), ('description', 'ETSI Qualified
+        # Certificate Policy (QCP)'), ('tls_dv', ''), ('tls_ov', ''),
+        # ('tls_ev', ''), ('tls_iv', ''), ('codesigning_ov', ''),
+        # ('codesigning_ev', '')])
+
+
+        if found_oid['tls_dv'] == 'TRUE':
             print (f"{bcolors.COLOR_DV}Domain Validated OID found{bcolors.ENDC}")
             return IDENTIFIED_TYPE_DV
-        elif OID_OV == policy_val.policy_identifier.dotted_string:
-            print (f"{bcolors.COLOR_OV}Organisation Validated OID found{bcolors.ENDC}")
-            return IDENTIFIED_TYPE_OV
-        elif OID_IV == policy_val.policy_identifier.dotted_string:
+        elif found_oid['tls_iv'] == 'TRUE':
             print (f"{bcolors.COLOR_IV}Individual Validated OID found{bcolors.ENDC}")
             return IDENTIFIED_TYPE_IV
-        elif OID_EV == policy_val.policy_identifier.dotted_string:
+        elif found_oid['tls_ov'] == 'TRUE':
+            print (f"{bcolors.COLOR_OV}Organisation Validated OID found{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_OV
+        elif found_oid['tls_ev'] == 'TRUE':
+            print (f"{bcolors.COLOR_EV}Extended Validated OID found{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_EV
+        elif found_oid['short_name'] == 'etsi-qcp-w':
+            print (f"{bcolors.COLOR_QWAC}QWAC Web Validated OID found{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_QWAC
+
+        elif OID_PSD2_WEB == policy_val.policy_identifier.dotted_string:
+            print (f"{bcolors.COLOR_QWAC}PSD2 Web Validated OID found{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_PSD2
+
+
+        if OID_CAB_FORUM_DV == policy_val.policy_identifier.dotted_string:
+            print (f"{bcolors.COLOR_DV}Domain Validated OID found{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_DV
+        elif OID_CAB_FORUM_OV == policy_val.policy_identifier.dotted_string:
+            print (f"{bcolors.COLOR_OV}Organisation Validated OID found{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_OV
+        elif OID_CAB_FORUM_IV == policy_val.policy_identifier.dotted_string:
+            print (f"{bcolors.COLOR_IV}Individual Validated OID found{bcolors.ENDC}")
+            return IDENTIFIED_TYPE_IV
+        elif OID_CAB_FORUM_EV == policy_val.policy_identifier.dotted_string:
             print (f"{bcolors.COLOR_EV}Extended Validated OID found{bcolors.ENDC}")
             return IDENTIFIED_TYPE_EV
         elif OID_QWAC_WEB == policy_val.policy_identifier.dotted_string:
@@ -179,6 +269,11 @@ def start_probe(host, port=443, timeout=5):
 
 def argparsing(exec_file):
     parser = argparse.ArgumentParser(exec_file)
+    parser.add_argument("--oid",
+                        dest='oid',
+                        help="CSV file containing OIDs and specification.",
+                        default=None,
+                        type=str)
     parser.add_argument("-i",
                         dest='input',
                         help="Input file.",
@@ -226,11 +321,11 @@ def assurance_to_str(code):
 
 def assurance_to_OID(code):
     if code == IDENTIFIED_TYPE_DV:
-        return OID_DV
+        return OID_CAB_FORUM_DV
     elif code == IDENTIFIED_TYPE_OV:
-        return OID_OV
+        return OID_CAB_FORUM_OV
     elif code == IDENTIFIED_TYPE_EV:
-        return OID_EV
+        return OID_CAB_FORUM_EV
     elif code == IDENTIFIED_TYPE_QWAC:
         return OID_QWAC_WEB
     elif code == IDENTIFIED_TYPE_PSD2:
@@ -253,9 +348,19 @@ def serv_certassurance_with_param(fqdn):
     return json.dumps(j)
 
 
+
+
 ### Main
 if __name__ == "__main__":
     args = argparsing(os.path.basename(__file__))
+
+    # Load OIDs
+    if args.oid is None:
+        print("Can't continue without OIDs")
+
+    # Load OIDs to memory - global var
+    poid = PolicyOID(args.oid)
+    # poid.headers()
 
     # Launch a micro HTTP service
     if args.listening_port is not None:
