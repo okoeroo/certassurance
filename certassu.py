@@ -154,16 +154,6 @@ class Database():
         j = row[2]
         return json.loads(j)
 
-
-        # OrderedDict([
-        # ('oid', '0.4.0.1456.1.1'), ('owner', 'ETSI'),
-        # ('customer', ''), ('short_name', 'etsi-qcp'), ('long_name', 'ETSI
-        # Qualified Certificate Policy'), ('description', 'ETSI Qualified
-        # Certificate Policy (QCP)'), ('tls_dv', ''), ('tls_ov', ''),
-        # ('tls_ev', ''), ('tls_iv', ''), ('codesigning_ov', ''),
-        # ('codesigning_ev', '')])
-
-
     def add(self, fqdn, certtype, obj_oid_rc):
         try:
             sql = '''INSERT INTO cache(fqdn, type, status) VALUES (?, ?, ?)'''
