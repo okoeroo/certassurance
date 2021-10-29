@@ -2,6 +2,7 @@
 
 from bottle import route, run, template
 
+import signal
 import sqlite3
 
 import binascii
@@ -72,6 +73,13 @@ OID_PSD2_WEB    = "0.4.0.19495.3.1"
 OID_ETSI_EV     = "0.4.0.2042.1.4"
 
 
+def handler(signum, frame):
+    msg = "Ctrl-c was pressed."
+    print(msg, flush=True)
+    print("")
+    exit(signum)
+
+
 """
 Wikipedia:
 
@@ -140,7 +148,20 @@ class Database():
         self.cur.execute(sql, (fqdn,))
 
         row = self.cur.fetchone()
-        print(row)
+        if row is None:
+            return None
+
+        j = row[2]
+        return json.loads(j)
+
+
+        # OrderedDict([
+        # ('oid', '0.4.0.1456.1.1'), ('owner', 'ETSI'),
+        # ('customer', ''), ('short_name', 'etsi-qcp'), ('long_name', 'ETSI
+        # Qualified Certificate Policy'), ('description', 'ETSI Qualified
+        # Certificate Policy (QCP)'), ('tls_dv', ''), ('tls_ov', ''),
+        # ('tls_ev', ''), ('tls_iv', ''), ('codesigning_ov', ''),
+        # ('codesigning_ev', '')])
 
 
     def add(self, fqdn, certtype, obj_oid_rc):
@@ -367,6 +388,10 @@ def serv_certassurance_with_param(fqdn):
 
 ### Main
 if __name__ == "__main__":
+    # Add signal handler
+    signal.signal(signal.SIGINT, handler)
+
+    # Arguments parsing
     args = argparsing(os.path.basename(__file__))
 
     # Lock and loading the database
@@ -412,7 +437,10 @@ if __name__ == "__main__":
             fqdn = line.strip()
             print(f"{bcolors.HEADER}--- {line.strip()} ---{bcolors.ENDC}")
             found_oid = db.lookup(fqdn)
-            if found_oid is None:
+            if found_oid:
+                print("Found in cache.")
+                print(found_oid)
+            else:
                 found_oid = start_probe(fqdn, args.destination_port, args.timeout)
                 if found_oid is None:
                     db.add(fqdn, "NONE", "error")
