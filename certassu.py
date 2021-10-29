@@ -2,6 +2,8 @@
 
 from bottle import route, run, template
 
+import sqlite3
+
 import binascii
 import os
 import sys
@@ -121,6 +123,24 @@ class PolicyOID():
             print(row)
 
 
+class Database():
+    def __init__(self, path):
+        self.con = sqlite3.connect(path)
+        self.cur = self.con.cursor()
+
+        self.cur.execute('''CREATE TABLE IF NOT EXISTS cache
+                            (fqdn text, type text, status text)''')
+
+        self.cur.execute('''CREATE UNIQUE INDEX IF NOT EXISTS idx_cache_fqdn ON cache (fqdn)''')
+
+    def add(self, fqdn, certtype, obj_oid_rc):
+        try:
+            sql = '''INSERT INTO cache(fqdn, type, status) VALUES (?, ?, ?)'''
+            self.cur.execute(sql, (fqdn, certtype, json.dumps(obj_oid_rc)))
+            self.con.commit()
+        except:
+            pass
+
 
 # Connect to host, get X.509 in PEM format
 def get_certificate(host, port=443, timeout=5):
@@ -146,7 +166,7 @@ def get_certificate(host, port=443, timeout=5):
 
 def info_cert(cert_x509):
     print("Subject:", cert_x509.subject.rfc4514_string())
-    print("Subject:", cert_x509.issuer.rfc4514_string())
+    print("Issuer:", cert_x509.issuer.rfc4514_string())
     print("Serial number:", cert_x509.serial_number)
 
 
@@ -177,8 +197,6 @@ def test_OIDs(cert_x509):
         if found_oid is None:
             continue
 
-        print("----", found_oid)
-
         # OrderedDict([
         # ('oid', '0.4.0.1456.1.1'), ('owner', 'ETSI'),
         # ('customer', ''), ('short_name', 'etsi-qcp'), ('long_name', 'ETSI
@@ -200,9 +218,11 @@ def test_OIDs(cert_x509):
         elif found_oid['tls_ev'] == 'TRUE':
             print (f"{bcolors.COLOR_EV}Extended Validated OID found{bcolors.ENDC}")
             found_oid['type'] = 'EV'
+
         elif found_oid['short_name'] == 'etsi-qcp-w':
             print (f"{bcolors.COLOR_QWAC}QWAC Web Validated OID found{bcolors.ENDC}")
             found_oid['type'] = 'QWAC'
+
 
         # PSD special
         elif OID_PSD2_WEB == policy_val.policy_identifier.dotted_string:
@@ -249,6 +269,11 @@ def argparsing(exec_file):
                         dest='oid',
                         help="CSV file containing OIDs and specification.",
                         default=None,
+                        type=str)
+    parser.add_argument("--dbfile",
+                        dest='db_file',
+                        help="Sqlite database file path.",
+                        default='cache.db',
                         type=str)
     parser.add_argument("-i",
                         dest='input',
@@ -311,6 +336,10 @@ def assurance_to_OID(code):
 @route('/certassurance/<fqdn>')
 def serv_certassurance_with_param(fqdn):
     found_oid = start_probe(fqdn, 443)
+    if found_id is None:
+        db.add(fqdn, "NONE", "error")
+    else:
+        db.add(fqdn, found_oid['type'], found_id)
 
     j = {}
     if found_oid is None:
@@ -330,13 +359,15 @@ def serv_certassurance_with_param(fqdn):
 if __name__ == "__main__":
     args = argparsing(os.path.basename(__file__))
 
+    # Lock and loading the database
+    db = Database(args.db_file)
+
     # Load OIDs
     if args.oid is None:
         print("Can't continue without OIDs")
 
     # Load OIDs to memory - global var
     poid = PolicyOID(args.oid)
-    # poid.headers()
 
     # Launch a micro HTTP service
     if args.listening_port is not None:
@@ -346,7 +377,11 @@ if __name__ == "__main__":
 
     # Just one host by its FQDN
     if args.fqdn is not None:
-        start_probe(args.fqdn, args.destination_port, args.timeout)
+        found_oid = start_probe(args.fqdn, args.destination_port, args.timeout)
+        if found_id is None:
+            db.add(args.fqdn, "NONE", "error")
+        else:
+            db.add(args.fqdn, found_oid['type'], found_id)
         sys.exit(0)
 
     # Process a list
@@ -357,7 +392,12 @@ if __name__ == "__main__":
     with open(args.input) as fp:
         lines = fp.readlines()
         for line in lines:
+            fqdn = line.strip()
             print(f"{bcolors.HEADER}--- {line.strip()} ---{bcolors.ENDC}")
-            start_probe(line.strip(), args.destination_port, args.timeout)
+            found_oid = start_probe(fqdn, args.destination_port, args.timeout)
+            if found_oid is None:
+                db.add(fqdn, "NONE", "error")
+            else:
+                db.add(fqdn, found_oid['type'], found_oid)
 
 
