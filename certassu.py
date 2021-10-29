@@ -133,6 +133,16 @@ class Database():
 
         self.cur.execute('''CREATE UNIQUE INDEX IF NOT EXISTS idx_cache_fqdn ON cache (fqdn)''')
 
+    def lookup(self, fqdn):
+        sql = " ".join(["SELECT fqdn, type, status",
+                          "FROM cache",
+                         "WHERE fqdn = ?"])
+        self.cur.execute(sql, (fqdn,))
+
+        row = self.cur.fetchone()
+        print(row)
+
+
     def add(self, fqdn, certtype, obj_oid_rc):
         try:
             sql = '''INSERT INTO cache(fqdn, type, status) VALUES (?, ?, ?)'''
@@ -336,10 +346,10 @@ def assurance_to_OID(code):
 @route('/certassurance/<fqdn>')
 def serv_certassurance_with_param(fqdn):
     found_oid = start_probe(fqdn, 443)
-    if found_id is None:
+    if found_oid is None:
         db.add(fqdn, "NONE", "error")
     else:
-        db.add(fqdn, found_oid['type'], found_id)
+        db.add(fqdn, found_oid['type'], found_oid)
 
     j = {}
     if found_oid is None:
@@ -377,11 +387,18 @@ if __name__ == "__main__":
 
     # Just one host by its FQDN
     if args.fqdn is not None:
-        found_oid = start_probe(args.fqdn, args.destination_port, args.timeout)
-        if found_id is None:
-            db.add(args.fqdn, "NONE", "error")
+        # Lookup in cache, if enabled
+        found_oid = db.lookup(args.fqdn)
+        if found_oid is None:
+            # Probe host
+            found_oid = start_probe(args.fqdn, args.destination_port, args.timeout)
+            if found_oid is None:
+                db.add(args.fqdn, "NONE", "error")
+            else:
+                db.add(args.fqdn, found_oid['type'], found_oid)
         else:
-            db.add(args.fqdn, found_oid['type'], found_id)
+            print(found_oid)
+
         sys.exit(0)
 
     # Process a list
@@ -394,10 +411,12 @@ if __name__ == "__main__":
         for line in lines:
             fqdn = line.strip()
             print(f"{bcolors.HEADER}--- {line.strip()} ---{bcolors.ENDC}")
-            found_oid = start_probe(fqdn, args.destination_port, args.timeout)
+            found_oid = db.lookup(fqdn)
             if found_oid is None:
-                db.add(fqdn, "NONE", "error")
-            else:
-                db.add(fqdn, found_oid['type'], found_oid)
+                found_oid = start_probe(fqdn, args.destination_port, args.timeout)
+                if found_oid is None:
+                    db.add(fqdn, "NONE", "error")
+                else:
+                    db.add(fqdn, found_oid['type'], found_oid)
 
 
