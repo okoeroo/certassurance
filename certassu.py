@@ -71,58 +71,8 @@ def handler(signum, frame):
     msg = "Ctrl-c was pressed."
     print(msg, flush=True)
     print("")
-    exit(signum)
+    sys.exit(signum)
 
-
-"""
-Wikipedia:
-
-EV HTTPS certificates contain a subject with X.509 OIDs for jurisdictionOfIncorporationCountryName (OID: 1.3.6.1.4.1.311.60.2.1.3),[12] jurisdictionOfIncorporationStateOrProvinceName (OID: 1.3.6.1.4.1.311.60.2.1.2) (optional),[13]jurisdictionLocalityName (OID: 1.3.6.1.4.1.311.60.2.1.1) (optional),[14] businessCategory (OID: 2.5.4.15)[15] and serialNumber (OID: 2.5.4.5),[16] with the serialNumber pointing to the ID at the relevant secretary of state (US) or government business registrar (outside US)[citation needed], as well as a CA-specific policy identifier so that EV-aware software, such as a web browser, can recognize them.[17] This identifier[18][failed verification] is what defines EV certificate and is the difference with OV certificate.
-"""
-
-class PolicyOID():
-    def __init__(self, path):
-        with open(path, "r") as f:
-            self.stream = io.StringIO(f.read())
-
-        self.reader = csv.DictReader(self.stream)
-
-    def lookup(self, oid):
-        # Rewind stream
-        self.rewind()
-
-        # OrderedDict([
-        # ('oid', '0.4.0.1456.1.1'), ('owner', 'ETSI'),
-        # ('customer', ''), ('short_name', 'etsi-qcp'), ('long_name', 'ETSI
-        # Qualified Certificate Policy'), ('description', 'ETSI Qualified
-        # Certificate Policy (QCP)'), ('tls_dv', ''), ('tls_ov', ''),
-        # ('tls_ev', ''), ('tls_iv', ''), ('codesigning_ov', ''),
-        # ('codesigning_ev', '')])
-
-        for row in self.reader:
-            for key, value in row.items():
-                if value == oid:
-                    return row
-        else:
-            return None
-
-    def rewind(self):
-        self.stream.seek(0, 0)
-
-    def headers(self):
-        # Rewind stream
-        self.rewind()
-
-        for row in self.reader:
-            print(row)
-            return
-
-    def show(self):
-        # Rewind stream
-        self.rewind()
-
-        for row in self.reader:
-            print(row)
 
 
 class Database():
@@ -221,7 +171,7 @@ class Database():
             # pass
 
     def lookup_policy_oid(self, oid):
-        print(f"looking up: \"{oid}\"")
+        # print(f"looking up: \"{oid}\"")
         sql = " ".join(["SELECT oid, owner, customer, short_name,",
                               " long_name, description, tls_dv, tls_ov, tls_ev, tls_iv,",
                               " codesigning_ov, codesigning_ev, tls_qwac, tls_psd2",
@@ -229,10 +179,10 @@ class Database():
                          "WHERE oid = ?"])
 
         self.cur.execute(sql, (oid,))
-        print(sql, oid)
+        # print(sql, oid)
 
         row = self.cur.fetchone()
-        print(row)
+        # print(row)
 
         if not row:
             print("OID", oid, "not found in db")
@@ -254,8 +204,8 @@ class Database():
         p['tls_qwac'] = row[12]
         p['tls_psd2'] = row[13]
 
-        pp = pprint.PrettyPrinter(indent=4)
-        pp.pprint(p)
+        # pp = pprint.PrettyPrinter(indent=4)
+        # pp.pprint(p)
 
         return p
 
@@ -329,12 +279,6 @@ def test_OIDs(cert_x509):
         else:
             p_qualifiers = None
 
-        print(type(pol_val_policy_identifier_dotter_str))
-        print(output, p_qualifiers)
-        print(pol_val_policy_identifier_dotter_str)
-
-        if "2.23.140.1.1" == pol_val_policy_identifier_dotter_str:
-            print("YES!")
 
         found_oid = db.lookup_policy_oid(pol_val_policy_identifier_dotter_str)
         if found_oid is None:
@@ -478,6 +422,7 @@ def assurance_to_OID(code):
 
 @route('/certassurance/<fqdn>')
 def serv_certassurance_with_param(fqdn):
+    print(f"{bcolors.HEADER}--- {fqdn} ---{bcolors.ENDC}")
     found_oid = start_probe(fqdn, 443)
     if found_oid is None:
         db.add_fqdn(fqdn, "NONE", "error")
@@ -524,6 +469,8 @@ if __name__ == "__main__":
 
     # Just one host by its FQDN
     if args.fqdn is not None:
+        print(f"{bcolors.HEADER}--- {args.fqdn} ---{bcolors.ENDC}")
+
         # Lookup in cache, if enabled
         found_oid = db.lookup_fqdn(args.fqdn)
         if found_oid is None:
@@ -534,7 +481,7 @@ if __name__ == "__main__":
             else:
                 db.add_fqdn(args.fqdn, found_oid['type'], found_oid)
         else:
-            print(found_oid)
+            print(json.dumps(found_oid))
 
         sys.exit(0)
 
@@ -551,7 +498,7 @@ if __name__ == "__main__":
             found_oid = db.lookup_fqdn(fqdn)
             if found_oid:
                 print("Found in cache.")
-                print(found_oid)
+                print(json.dumps(found_oid))
             else:
                 found_oid = start_probe(fqdn, args.destination_port, args.timeout)
                 if found_oid is None:
