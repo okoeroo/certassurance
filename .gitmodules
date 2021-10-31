@@ -1,0 +1,3 @@
+[submodule "constants"]
+	path = constants
+	url = git@github.com:okoeroo/constants.git
