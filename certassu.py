@@ -12,7 +12,7 @@ import argparse
 
 import ssl
 import socket
-from pprint import pprint
+import pprint
 import OpenSSL
 
 import io
@@ -63,14 +63,8 @@ IDENTIFIED_TYPE_IV      = 6
 
 # Source:
 # https://cabforum.org/object-registry/
-OID_CAB_FORUM_DV        = "2.23.140.1.2.1"
-OID_CAB_FORUM_OV        = "2.23.140.1.2.2"
-OID_CAB_FORUM_IV        = "2.23.140.1.2.3" # individual-validated
-OID_CAB_FORUM_EV        = "2.23.140.1.1"
 OID_QWAC_WEB    = "0.4.0.194112.1.4"
 OID_PSD2_WEB    = "0.4.0.19495.3.1"
-
-OID_ETSI_EV     = "0.4.0.2042.1.4"
 
 
 def handler(signum, frame):
@@ -132,16 +126,141 @@ class PolicyOID():
 
 
 class Database():
-    def __init__(self, path):
-        self.con = sqlite3.connect(path)
-        self.cur = self.con.cursor()
-
+    def setup_cache(self):
         self.cur.execute('''CREATE TABLE IF NOT EXISTS cache
                             (fqdn text, type text, status text)''')
 
-        self.cur.execute('''CREATE UNIQUE INDEX IF NOT EXISTS idx_cache_fqdn ON cache (fqdn)''')
+        self.cur.execute('''CREATE UNIQUE INDEX IF NOT EXISTS
+                            idx_cache_fqdn ON cache (fqdn)''')
 
-    def lookup(self, fqdn):
+    def setup_certificate_policies(self):
+        self.cur.execute('''CREATE TABLE IF NOT EXISTS certificate_policies
+                            (oid text, owner text, customer text, short_name text, 
+                            long_name text, description text, tls_dv text, 
+                            tls_ov text, tls_ev text, tls_iv text, codesigning_ov text, 
+                            codesigning_ev text, tls_qwac text, tls_psd2 text)''')
+
+        self.cur.execute('''CREATE UNIQUE INDEX IF NOT EXISTS 
+                            idx_certificate_policies_oid ON certificate_policies (oid)''')
+
+
+    def __init__(self, db_path=None, cert_policy_oid_csv_path=None):
+        if db_path:
+            self.db_path = db_path
+        else:
+            self.db_path = ":memory:"
+
+
+        self.con = sqlite3.connect(self.db_path)
+        self.cur = self.con.cursor()
+
+        # DB setup
+        self.setup_cache()
+        self.setup_certificate_policies()
+
+
+        with open(cert_policy_oid_csv_path, "r") as f:
+            self.stream = io.StringIO(f.read())
+
+        reader = csv.DictReader(self.stream)
+
+        # OrderedDict([
+        # ('oid', '0.4.0.1456.1.1'), ('owner', 'ETSI'),
+        # ('customer', ''), ('short_name', 'etsi-qcp'), ('long_name', 'ETSI
+        # Qualified Certificate Policy'), ('description', 'ETSI Qualified
+        # Certificate Policy (QCP)'), ('tls_dv', ''), ('tls_ov', ''),
+        # ('tls_ev', ''), ('tls_iv', ''), ('codesigning_ov', ''),
+        # ('codesigning_ev', '')])
+
+        for row in reader:
+            # QWAC Web detected
+            if row['oid'] == OID_QWAC_WEB:
+                self.add_policy_oid(row['oid'], row['owner'], row['customer'], row['short_name'],
+                                    row['long_name'], row['description'], row['tls_dv'], row['tls_ov'], row['tls_ev'], row['tls_iv'],
+                                    row['codesigning_ov'], row['codesigning_ev'], "TRUE", "FALSE")
+            # PSD2 detected
+            elif row['oid'] == OID_PSD2_WEB:
+                self.add_policy_oid(row['oid'], row['owner'], row['customer'], row['short_name'],
+                                    row['long_name'], row['description'], row['tls_dv'], row['tls_ov'], row['tls_ev'], row['tls_iv'],
+                                    row['codesigning_ov'], row['codesigning_ev'], "FALSE", "TRUE")
+            # CORRECTION on OID
+            elif row['oid'] == OID_PSD2_WEB:
+                self.add_policy_oid(row['oid'], row['owner'], row['customer'], row['short_name'],
+                                    row['long_name'], row['description'], row['tls_dv'], row['tls_ov'], row['tls_ev'], row['tls_iv'],
+                                    row['codesigning_ov'], row['codesigning_ev'], "FALSE", "TRUE")
+            # Reasonably normal policies
+            else:
+                self.add_policy_oid(row['oid'], row['owner'], row['customer'], row['short_name'],
+                                    row['long_name'], row['description'], row['tls_dv'], row['tls_ov'], row['tls_ev'], row['tls_iv'],
+                                    row['codesigning_ov'], row['codesigning_ev'], "FALSE", "FALSE")
+        else:
+            return None
+
+    def add_policy_oid(self, oid, owner, customer, short_name,
+                             long_name, description, tls_dv, tls_ov, tls_ev, tls_iv,
+                             codesigning_ov, codesigning_ev, tls_qwac, tls_psd2):
+        try:
+            sql = " ".join(["INSERT INTO certificate_policies",
+                            "(oid, owner, customer, short_name,",
+                            "long_name, description, tls_dv, tls_ov, tls_ev, tls_iv,",
+                            "codesigning_ov, codesigning_ev, tls_qwac, tls_psd2)",
+                            "VALUES",
+                            "(?, ?, ?, ?,",
+                            "?, ?, ?, ?, ?, ?,",
+                            "?, ?, ?, ?)"
+                            ])
+
+
+            self.cur.execute(sql, (oid, owner, customer, short_name,
+                                    long_name, description, tls_dv, tls_ov, tls_ev, tls_iv,
+                                    codesigning_ov, codesigning_ev, tls_qwac, tls_psd2))
+            self.con.commit()
+        except Exception as e:
+            print(oid, owner, customer, short_name)
+            print(e)
+            # pass
+
+    def lookup_policy_oid(self, oid):
+        print(f"looking up: \"{oid}\"")
+        sql = " ".join(["SELECT oid, owner, customer, short_name,",
+                              " long_name, description, tls_dv, tls_ov, tls_ev, tls_iv,",
+                              " codesigning_ov, codesigning_ev, tls_qwac, tls_psd2",
+                          "FROM certificate_policies",
+                         "WHERE oid = ?"])
+
+        self.cur.execute(sql, (oid,))
+        print(sql, oid)
+
+        row = self.cur.fetchone()
+        print(row)
+
+        if not row:
+            print("OID", oid, "not found in db")
+            return None
+
+        p = {}
+        p['oid'] = row[0]
+        p['owner']  = row[1]
+        p['customer'] = row[2]
+        p['short_name'] = row[3]
+        p['long_name'] = row[4]
+        p['description'] = row[5]
+        p['tls_dv'] = row[6]
+        p['tls_ov'] = row[7]
+        p['tls_ev'] = row[8]
+        p['tls_iv'] = row[9]
+        p['codesigning_ov'] = row[10]
+        p['codesigning_ev'] = row[11]
+        p['tls_qwac'] = row[12]
+        p['tls_psd2'] = row[13]
+
+        pp = pprint.PrettyPrinter(indent=4)
+        pp.pprint(p)
+
+        return p
+
+
+    def lookup_fqdn(self, fqdn):
         sql = " ".join(["SELECT fqdn, type, status",
                           "FROM cache",
                          "WHERE fqdn = ?"])
@@ -154,7 +273,7 @@ class Database():
         j = row[2]
         return json.loads(j)
 
-    def add(self, fqdn, certtype, obj_oid_rc):
+    def add_fqdn(self, fqdn, certtype, obj_oid_rc):
         try:
             sql = '''INSERT INTO cache(fqdn, type, status) VALUES (?, ?, ?)'''
             self.cur.execute(sql, (fqdn, certtype, json.dumps(obj_oid_rc)))
@@ -193,28 +312,31 @@ def info_cert(cert_x509):
 
 # Get the Policy OIDs from the certificate and see if it contains the OIDs for DN, OV or EV
 def test_OIDs(cert_x509):
-    # poid.show()
-
     try:
         val = cert_x509.extensions.get_extension_for_oid(ExtensionOID.CERTIFICATE_POLICIES).value
 
     except x509.ExtensionNotFound:
+        print("Extension Not Found")
         return None
 
-    # Display
+    # Test
     for policy_val in val:
-        output = 'OID %s: ' % policy_val.policy_identifier.dotted_string
+        pol_val_policy_identifier_dotter_str = str(policy_val.policy_identifier.dotted_string)
+        output = 'OID %s: ' % pol_val_policy_identifier_dotter_str
 
         if policy_val.policy_qualifiers is not None:
             p_qualifiers = [p_q for p_q in policy_val.policy_qualifiers]
         else:
             p_qualifiers = None
 
+        print(type(pol_val_policy_identifier_dotter_str))
         print(output, p_qualifiers)
+        print(pol_val_policy_identifier_dotter_str)
 
-    # Test
-    for policy_val in val:
-        found_oid = poid.lookup(policy_val.policy_identifier.dotted_string)
+        if "2.23.140.1.1" == pol_val_policy_identifier_dotter_str:
+            print("YES!")
+
+        found_oid = db.lookup_policy_oid(pol_val_policy_identifier_dotter_str)
         if found_oid is None:
             continue
 
@@ -358,9 +480,9 @@ def assurance_to_OID(code):
 def serv_certassurance_with_param(fqdn):
     found_oid = start_probe(fqdn, 443)
     if found_oid is None:
-        db.add(fqdn, "NONE", "error")
+        db.add_fqdn(fqdn, "NONE", "error")
     else:
-        db.add(fqdn, found_oid['type'], found_oid)
+        db.add_fqdn(fqdn, found_oid['type'], found_oid)
 
     j = {}
     if found_oid is None:
@@ -384,15 +506,15 @@ if __name__ == "__main__":
     # Arguments parsing
     args = argparsing(os.path.basename(__file__))
 
-    # Lock and loading the database
-    db = Database(args.db_file)
-
     # Load OIDs
     if args.oid is None:
         print("Can't continue without OIDs")
 
+    # Lock and loading the database
+    db = Database(args.db_file, args.oid)
+
     # Load OIDs to memory - global var
-    poid = PolicyOID(args.oid)
+    # poid = PolicyOID(args.oid)
 
     # Launch a micro HTTP service
     if args.listening_port is not None:
@@ -403,14 +525,14 @@ if __name__ == "__main__":
     # Just one host by its FQDN
     if args.fqdn is not None:
         # Lookup in cache, if enabled
-        found_oid = db.lookup(args.fqdn)
+        found_oid = db.lookup_fqdn(args.fqdn)
         if found_oid is None:
             # Probe host
             found_oid = start_probe(args.fqdn, args.destination_port, args.timeout)
             if found_oid is None:
-                db.add(args.fqdn, "NONE", "error")
+                db.add_fqdn(args.fqdn, "NONE", "error")
             else:
-                db.add(args.fqdn, found_oid['type'], found_oid)
+                db.add_fqdn(args.fqdn, found_oid['type'], found_oid)
         else:
             print(found_oid)
 
@@ -426,15 +548,15 @@ if __name__ == "__main__":
         for line in lines:
             fqdn = line.strip()
             print(f"{bcolors.HEADER}--- {line.strip()} ---{bcolors.ENDC}")
-            found_oid = db.lookup(fqdn)
+            found_oid = db.lookup_fqdn(fqdn)
             if found_oid:
                 print("Found in cache.")
                 print(found_oid)
             else:
                 found_oid = start_probe(fqdn, args.destination_port, args.timeout)
                 if found_oid is None:
-                    db.add(fqdn, "NONE", "error")
+                    db.add_fqdn(fqdn, "NONE", "error")
                 else:
-                    db.add(fqdn, found_oid['type'], found_oid)
+                    db.add_fqdn(fqdn, found_oid['type'], found_oid)
 
 
