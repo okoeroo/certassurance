@@ -166,9 +166,9 @@ class Database():
                                     codesigning_ov, codesigning_ev, tls_qwac, tls_psd2))
             self.con.commit()
         except Exception as e:
-            print(oid, owner, customer, short_name)
-            print(e)
-            # pass
+            # print(oid, owner, customer, short_name)
+            # print(e)
+            pass
 
     def lookup_policy_oid(self, oid):
         # print(f"looking up: \"{oid}\"")
@@ -324,7 +324,7 @@ def test_OIDs(cert_x509):
         return found_oid
 
     else:
-        print (f"{bcolors.FAIL}No OID found for DV, OV, EV{bcolors.ENDC}")
+        print (f"{bcolors.FAIL}No OID found for DV, OV, EV, IV, QWAC{bcolors.ENDC}")
         sys.exit(1)
         return None
 
